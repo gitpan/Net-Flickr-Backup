@@ -21,6 +21,7 @@ OPTIONS
     or a valid Config::Simple config file. Options are grouped by "block".
 
   flickr
+
     * api_key
         String. *required*
 
@@ -46,6 +47,7 @@ OPTIONS
             Use XML::XPath.
 
   backup
+
     * photos_root
         String. *required*
 
@@ -83,14 +85,33 @@ OPTIONS
                 These photos are scaled to 500 pixels at the longest
                 dimension. A _m extension is added.
 
+            * medium_640
+                These photos are scaled to 640 pixels at the longest
+                dimension. A _z extension is added.
+
             * square
                 These photos are to cropped to 75 x 75 pixels at the center.
                 A _s extension is added.
+
+            * site_mp4
+                The MP4 version of a video uploaded to Flickr. A _site
+                extension is added.
+
+            * video_original
+                An original video uploaded to Flickr. No extentsion is
+                added.
 
     * fetch_original
         Boolean.
 
         Retrieve the "original" version of a photo from the Flickr servers.
+
+        Default is true.
+
+    * fetch_video_original
+        Boolean.
+
+        Retrieve the "original" version of a video from the Flickr servers.
 
         Default is true.
 
@@ -103,11 +124,27 @@ OPTIONS
 
         Default is false.
 
+    * fetch_medium_640
+        Boolean.
+
+        Retrieve the "medium" version of a photo from the Flickr servers;
+        these photos have been scaled to 640 pixels at the longest
+        dimension.
+
+        Default is false.
+
     * fetch_square
         Boolean.
 
         Retrieve the "square" version of a photo from the Flickr servers;
         these photos have been cropped to 75 x 75 pixels at the center.
+
+        Default is false.
+
+    * fetch_site_mp4
+        Boolean.
+
+        Retrieve the "site MP4" version of a video from the Flickr servers;
 
         Default is false.
 
@@ -126,6 +163,7 @@ OPTIONS
         Default is false.
 
   rdf
+
     * do_dump
         Boolean.
 
@@ -192,26 +230,8 @@ OPTIONS
             <geoname:gtopo30>2</geoname:gtopo30>
          </geoname:Feature>
 
-    * <query_trynt_color_api>
-        Boolean.
-
-        If true, the trynt colour extraction web service will be queried
-        with the URL for the "medium" sized photo. Each colour will be added
-        as it's own description, referenced from the photo's principal
-        description. For example :
-
-         <flickr:photo rdf:about="http://www.flickr.com/photos/35034348999@N01/299815039">
-           <trynt:hasColor rdf:resource="http://www.flickr.com/photos/35034348999@N01/299815039#c0c0c0"/>
-         </flickr:photo>
-
-         <trynt:color rdf:about="http://www.flickr.com/photos/35034348999@N01/299815039#c0c0c0">
-            <trynt:hexidecimal>c0c0c0</trynt:hexidecimal>
-            <trynt:count>654</trynt:count>
-         </trynt:color>
-
-        Default is false.
-
   iptc
+
     * do_dump
         Boolean.
 
@@ -237,11 +257,13 @@ OPTIONS
         Default is false.
 
   search
+
     Any valid parameter that can be passed to the *flickr.photos.search*
     method except 'user_id' which is pre-filled with the user_id that
     corresponds to the flickr.auth_token token.
 
   modified_since
+
     String.
 
     This specifies a time-based limiting criteria for fetching photos.
@@ -259,25 +281,31 @@ OPTIONS
 
 PACKAGE METHODS
   __PACKAGE__->new($cfg)
+
     Returns a *Net::Flickr::Backup* object.
 
 OBJECTS METHODS YOU SHOULD CARE ABOUT
   $obj->backup()
+
     Returns true or false.
 
 OBJECT METHODS YOU MAY CARE ABOUT
   $obj->backup_photo($id,$secret)
+
     Backup an individual photo. This method is called internally by
     *backup*.
 
   $obj->scrub()
+
     Returns true or false.
 
   $obj->cancel_backup()
+
     Cancel the backup process as soon as the current photo backup is
     complete.
 
   $obj->register_callback($name, \&func)
+
     This method is still considered experimental and may be removed.
 
     Valid callback triggers are :
@@ -311,6 +339,7 @@ OBJECT METHODS YOU MAY CARE ABOUT
     Returns true or false, if *$func* is not a valid code reference.
 
   $obj->namespaces()
+
     Returns a hash ref of the prefixes and namespaces used by
     *Net::Flickr::RDF*
 
@@ -349,9 +378,6 @@ OBJECT METHODS YOU MAY CARE ABOUT
     skos
         http://www.w3.org/2004/02/skos/core#
 
-    trynt
-        http://www.trynt.com#
-
     *Net::Flickr::Backup* adds the following namespaces :
 
     computer
@@ -359,9 +385,11 @@ OBJECT METHODS YOU MAY CARE ABOUT
         variable.
 
   $obj->namespace_prefix($uri)
+
     Return the namespace prefix for *$uri*
 
   $obj->uri_shortform($prefix,$name)
+
     Returns a string in the form of *prefix*:*property*. The property is the
     value of $name. The prefix passed may or may be the same as the prefix
     returned depending on whether or not the user has defined or redefined
@@ -371,6 +399,7 @@ OBJECT METHODS YOU MAY CARE ABOUT
     default list of namespaces.
 
   $obj->make_photo_triples(\%data)
+
     Returns an array ref of array refs of the meta data associated with a
     photo (*%data*).
 
@@ -378,9 +407,11 @@ OBJECT METHODS YOU MAY CARE ABOUT
     and the method returns undef.
 
   $obj->namespace_prefix($uri)
+
     Return the namespace prefix for *$uri*
 
   $obj->uri_shortform($prefix,$name)
+
     Returns a string in the form of *prefix*:*property*. The property is the
     value of $name. The prefix passed may or may be the same as the prefix
     returned depending on whether or not the user has defined or redefined
@@ -390,6 +421,7 @@ OBJECT METHODS YOU MAY CARE ABOUT
     default list of namespaces.
 
   $obj->api_call(\%args)
+
     Valid args are :
 
     * method
@@ -408,10 +440,12 @@ OBJECT METHODS YOU MAY CARE ABOUT
     XML::LibXML is installed) or a *XML::XPath* object.
 
   $obj->log()
+
     Returns a *Log::Dispatch* object.
 
 EXAMPLES
   CONFIG FILES
+
     This is an example of a Config::Simple file used to back up photos
     tagged with 'cameraphone' from Flickr
 
@@ -437,6 +471,7 @@ EXAMPLES
      rdfdump_root=/home/asc/photos
 
   RDF
+
     This is an example of an RDF dump for a photograph backed up from Flickr
     (using Net::Flickr::RDF) :
 
@@ -449,7 +484,6 @@ EXAMPLES
       xmlns:nfr_geo="http://www.machinetags.org/wiki/geo#debug"
       xmlns:place="x-urn:flickr:place:"
       xmlns:exif="http://nwalsh.com/rdf/exif#"
-      xmlns:trynt="http://www.trynt.com#"
       xmlns:mt="x-urn:flickr:machinetag:"
       xmlns:exifi="http://nwalsh.com/rdf/exif-intrinsic#"
       xmlns:geonames="http://www.machinetags.org/wiki/geonames#feature"
@@ -526,20 +560,6 @@ EXAMPLES
         <exif:shutterSpeedValue>4351/1000</exif:shutterSpeedValue>
         <exif:exposureTime>0.049 sec (49/1000)</exif:exposureTime>
       </rdf:Description>
-
-      <trynt:color rdf:about="http://www.flickr.com/photos/35034348999@N01/522214395#604040">
-        <trynt:hexidecimal>604040</trynt:hexidecimal>
-        <trynt:count>472</trynt:count>
-      </trynt:color>
-
-      <rdf:Description rdf:about="x-urn:flickr:tag">
-        <rdfs:subClassOf rdf:resource="http://www.w3.org/2004/02/skos/core#Concept"/>
-      </rdf:Description>
-
-      <trynt:color rdf:about="http://www.flickr.com/photos/35034348999@N01/522214395#000000">
-        <trynt:hexidecimal>000000</trynt:hexidecimal>
-        <trynt:count>4841</trynt:count>
-      </trynt:color>
 
       <flickr:tag rdf:about="http://www.flickr.com/photos/35034348999@N01/tags/sanfrancisco">
         <skos:prefLabel>san francisco</skos:prefLabel>
@@ -655,16 +675,6 @@ EXAMPLES
         <a:hasAnnotation rdf:resource="http://www.flickr.com/photos/straup/522214395/#comment72157600295486776"/>
         <a:hasAnnotation rdf:resource="http://www.flickr.com/photos/straup/522214395/#comment72157600293655654"/>
         <geo:Point rdf:resource="http://www.flickr.com/photos/35034348999@N01/522214395#location"/>
-        <trynt:hasColor rdf:resource="http://www.flickr.com/photos/35034348999@N01/522214395#000000"/>
-        <trynt:hasColor rdf:resource="http://www.flickr.com/photos/35034348999@N01/522214395#c0c0c0"/>
-        <trynt:hasColor rdf:resource="http://www.flickr.com/photos/35034348999@N01/522214395#200000"/>
-        <trynt:hasColor rdf:resource="http://www.flickr.com/photos/35034348999@N01/522214395#402020"/>
-        <trynt:hasColor rdf:resource="http://www.flickr.com/photos/35034348999@N01/522214395#808080"/>
-        <trynt:hasColor rdf:resource="http://www.flickr.com/photos/35034348999@N01/522214395#a08080"/>
-        <trynt:hasColor rdf:resource="http://www.flickr.com/photos/35034348999@N01/522214395#000020"/>
-        <trynt:hasColor rdf:resource="http://www.flickr.com/photos/35034348999@N01/522214395#c0a0a0"/>
-        <trynt:hasColor rdf:resource="http://www.flickr.com/photos/35034348999@N01/522214395#604040"/>
-        <trynt:hasColor rdf:resource="http://www.flickr.com/photos/35034348999@N01/522214395#806060"/>
       </flickr:photo>
 
       <dcterms:StillImage rdf:about="http://farm1.static.flickr.com/232/522214395_ed16f959a2_t.jpg">
@@ -696,26 +706,6 @@ EXAMPLES
         <skos:prefLabel rdf:resource="filtr:process=filtr"/>
       </flickr:tag>
 
-      <trynt:color rdf:about="http://www.flickr.com/photos/35034348999@N01/522214395#808080">
-        <trynt:hexidecimal>808080</trynt:hexidecimal>
-        <trynt:count>726</trynt:count>
-      </trynt:color>
-
-      <trynt:color rdf:about="http://www.flickr.com/photos/35034348999@N01/522214395#a08080">
-        <trynt:hexidecimal>a08080</trynt:hexidecimal>
-        <trynt:count>575</trynt:count>
-      </trynt:color>
-
-      <trynt:color rdf:about="http://www.flickr.com/photos/35034348999@N01/522214395#000020">
-        <trynt:hexidecimal>000020</trynt:hexidecimal>
-        <trynt:count>499</trynt:count>
-      </trynt:color>
-
-      <trynt:color rdf:about="http://www.flickr.com/photos/35034348999@N01/522214395#402020">
-        <trynt:hexidecimal>402020</trynt:hexidecimal>
-        <trynt:count>749</trynt:count>
-      </trynt:color>
-
       <flickr:tag rdf:about="http://www.flickr.com/photos/tags/ph:camera=n95">
         <skos:altLabel>n95</skos:altLabel>
         <skos:broader rdf:resource="http://www.machinetags.org/wiki/ph#camera"/>
@@ -741,11 +731,6 @@ EXAMPLES
         <skos:altLabel rdf:resource="geo:debug=namespacetest"/>
       </flickr:tag>
 
-      <trynt:color rdf:about="http://www.flickr.com/photos/35034348999@N01/522214395#200000">
-        <trynt:hexidecimal>200000</trynt:hexidecimal>
-        <trynt:count>841</trynt:count>
-      </trynt:color>
-
       <dcterms:StillImage rdf:about="http://farm1.static.flickr.com/232/522214395_ed16f959a2_m.jpg">
         <dcterms:relation>Small</dcterms:relation>
         <exifi:height>180</exifi:height>
@@ -758,11 +743,6 @@ EXAMPLES
       <rdf:Description rdf:about="x-urn:flickr:user">
         <rdfs:subClassOf rdf:resource="http://xmlns.com/foaf/0.1/Person"/>
       </rdf:Description>
-
-      <trynt:color rdf:about="http://www.flickr.com/photos/35034348999@N01/522214395#806060">
-        <trynt:hexidecimal>806060</trynt:hexidecimal>
-        <trynt:count>464</trynt:count>
-      </trynt:color>
 
       <flickr:machinetag rdf:about="http://www.machinetags.org/wiki/ph#camera">
         <mt:predicate>camera</mt:predicate>
@@ -788,11 +768,6 @@ EXAMPLES
         <rdfs:seeAlso rdf:resource="http://www.flickr.com/photos/35034348999@N01/522214395#exif"/>
       </dcterms:StillImage>
 
-      <trynt:color rdf:about="http://www.flickr.com/photos/35034348999@N01/522214395#c0a0a0">
-        <trynt:hexidecimal>c0a0a0</trynt:hexidecimal>
-        <trynt:count>488</trynt:count>
-      </trynt:color>
-
       <flickr:place rdf:about="http://www.flickr.com/geo/United%20States/California/San%20Francisco/San%20Francisco">
         <place:county>San Francisco</place:county>
         <place:country>United States</place:country>
@@ -800,11 +775,6 @@ EXAMPLES
         <place:locality>San Francisco</place:locality>
         <dc:isReferencedBy rdf:resource="http://www.flickr.com/photos/35034348999@N01/522214395"/>
       </flickr:place>
-
-      <trynt:color rdf:about="http://www.flickr.com/photos/35034348999@N01/522214395#c0c0c0">
-        <trynt:hexidecimal>c0c0c0</trynt:hexidecimal>
-        <trynt:count>1475</trynt:count>
-      </trynt:color>
 
       <flickr:tag rdf:about="http://www.flickr.com/photos/tags/geo:debug=namespacetest">
         <skos:altLabel>namespace test</skos:altLabel>
@@ -815,13 +785,16 @@ EXAMPLES
       </rdf:RDF>
 
 VERSION
-    2.991
+    3.0
 
 DATE
-    $Date: 2008/02/08 08:20:10 $
+    $Date: 2010/12/19 19:06:56 $
 
 AUTHOR
     Aaron Straup Cope <ascope@cpan.org>
+
+CONTRIBUTORS
+    Thomas Sibley <tsibley@cpan.org>
 
 SEE ALSO
     Net::Flickr::API

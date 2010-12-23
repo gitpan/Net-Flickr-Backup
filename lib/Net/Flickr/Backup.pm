@@ -1,4 +1,4 @@
-# $Id: Backup.pm,v 1.106 2008/02/08 08:20:10 asc Exp $
+# $Id: Backup.pm,v 1.107 2010/12/19 19:06:56 asc Exp $
 # -*-perl-*-
 
 use strict;
@@ -7,7 +7,7 @@ use warnings;
 package Net::Flickr::Backup;
 use base qw (Net::Flickr::RDF);
 
-$Net::Flickr::Backup::VERSION = '2.991';
+$Net::Flickr::Backup::VERSION = '3.0';
 
 =head1 NAME
 
@@ -124,10 +124,23 @@ added.
 These photos are scaled to 500 pixels at the longest dimension. A B<_m>
 extension is added.
 
+=item * B<medium_640>
+
+These photos are scaled to 640 pixels at the longest dimension. A B<_z>
+extension is added.
+
 =item * B<square>
 
 These photos are to cropped to 75 x 75 pixels at the center. A B<_s>
 extension is added.
+
+=item * B<site_mp4>
+
+The MP4 version of a video uploaded to Flickr. A B<_site> extension is added.
+
+=item * B<video_original>
+
+An original video uploaded to Flickr. No extentsion is added.
 
 =back
 
@@ -141,6 +154,14 @@ Retrieve the "original" version of a photo from the Flickr servers.
 
 Default is true.
 
+=item * B<fetch_video_original>
+
+Boolean.
+
+Retrieve the "original" version of a video from the Flickr servers. 
+
+Default is true.
+
 =item * B<fetch_medium>
 
 Boolean.
@@ -150,12 +171,29 @@ have been scaled to 500 pixels at the longest dimension.
 
 Default is false.
 
+=item * B<fetch_medium_640>
+
+Boolean.
+
+Retrieve the "medium" version of a photo from the Flickr servers; these photos
+have been scaled to 640 pixels at the longest dimension. 
+
+Default is false.
+
 =item * B<fetch_square>
 
 Boolean.
 
 Retrieve the "square" version of a photo from the Flickr servers; these photos
 have been cropped to 75 x 75 pixels at the center.
+
+Default is false.
+
+=item * B<fetch_site_mp4>
+
+Boolean.
+
+Retrieve the "site MP4" version of a video from the Flickr servers;
 
 Default is false.
 
@@ -249,25 +287,6 @@ added as properties of the photo's geo:Point description. For example :
     <geoname:gtopo30>2</geoname:gtopo30>
  </geoname:Feature>
 
-=item * <query_trynt_color_api>                                                                                                                                                                        
-                                                                                                                                                                                                       
-Boolean.                                                                                                                                                                                               
-                                                                                                                                                                                                       
-If true, the trynt colour extraction web service will be queried with the URL                                                                                                                          
-for the "medium" sized photo. Each colour will be added as it's own description,                                                                                                                       
-referenced from the photo's principal description. For example :                                                                                                                                       
-                                                                                                                                                                                                       
- <flickr:photo rdf:about="http://www.flickr.com/photos/35034348999@N01/299815039">
-   <trynt:hasColor rdf:resource="http://www.flickr.com/photos/35034348999@N01/299815039#c0c0c0"/>
- </flickr:photo>
-
- <trynt:color rdf:about="http://www.flickr.com/photos/35034348999@N01/299815039#c0c0c0">
-    <trynt:hexidecimal>c0c0c0</trynt:hexidecimal>
-    <trynt:count>654</trynt:count>
- </trynt:color>
-
-Default is false.
-
 =back
 
 =head2 iptc
@@ -354,13 +373,20 @@ use DirHandle;
 use IO::AtomicFile;
 use IO::Scalar;
 use LWP::Simple;
+use LWP::UserAgent;
+use HTTP::Request;
 
 use Memoize;
 use Sys::Hostname;
 
-Readonly::Hash my %FETCH_SIZES => ('Original' => '',
+Readonly::Hash my %FETCH_SIZES => (
+				   'Original' => '',
 				   'Medium'   => '_m',
-				   'Square'   => '_s');
+				   'Medium 640'   => '_z',
+				   'Square'   => '_s',
+				   'Video Original' => '',
+				   'Site MP4' => '_site',
+				   );
 
 Readonly::Scalar my $FLICKR_URL        => "http://www.flickr.com/";
 Readonly::Scalar my $FLICKR_URL_PHOTOS => $FLICKR_URL . "photos/";				      
@@ -524,7 +550,7 @@ sub backup {
                         my $id      = $node->getAttribute("id");
                         my $secret  = $node->getAttribute("secret");
                         
-                        $self->log()->info(sprintf("process image %d (%s)",
+                        $self->log()->info(sprintf("process image %s (%s)",
                                                    $id, &_clean($node->getAttribute("title"))));
                         
                         #
@@ -541,7 +567,7 @@ sub backup {
 
                 }
                 
-                if ($current_page == $num_pages) {
+                if ($current_page >= $num_pages) {
                         $poll = 0;
                 }
                 
@@ -656,10 +682,13 @@ sub backup_photo {
 
         foreach my $label (keys %FETCH_SIZES) {
                 
-                my $fetch_param = "fetch_".lc($label);
+	    my $fetch_label = lc($label);
+	    $fetch_label =~ s/ /_/g;
+
+                my $fetch_param = "fetch_" . $fetch_label;
                 my $do_fetch    = 1;
                 
-                if (($label ne "Original") || (exists($fetch_cfg->{$fetch_param}))) {
+                if (($label ne "Original") || ($label ne "Video Original") || (exists($fetch_cfg->{$fetch_param}))) {
                         $do_fetch = $fetch_cfg->{$fetch_param};
                 }
                 
@@ -678,9 +707,25 @@ sub backup_photo {
                 }
                 
                 my $source  = $sz->getAttribute("source");
-                
+
+		my $ext = 'jpg';
+
+	        if (($label eq 'Site MP4') || ($label eq 'Video Original')){
+
+		    my $ua = LWP::UserAgent->new();
+		    my $req = HTTP::Request->new('HEAD' => $source);
+		    my $res = $ua->request($req);
+		    my $headers = $res->headers();
+		    my $disp = $headers->{"content-disposition"};
+
+		    $disp =~ /\.([^\.]+)$/;
+		    $ext = $1;
+
+		    $self->log()->info("video! $source has $disp becomes $ext");
+		}
+
                 my $img_root  = File::Spec->catdir($photos_root, $yyyy, $mm, $dd);
-                my $img_fname = sprintf("%04d%02d%02d-%d-%s%s.jpg", $yyyy, $mm, $dd, $id, $title, $FETCH_SIZES{$label});
+                my $img_fname = sprintf("%04d%02d%02d-%s-%s%s.%s", $yyyy, $mm, $dd, $id, $title, $FETCH_SIZES{$label}, $ext);
                 
                 $self->log()->info("scrub-store $img_fname");
                 push @{$self->{'_scrub'}->{$id}}, $img_fname;
@@ -690,15 +735,16 @@ sub backup_photo {
                 
                 #
                 
-                if (! $force) {
-                        if (! $has_changed) {
+                if ((-s $img_bak) && (! $force)){
+
+                        if (! $has_changed){
                                 $self->log()->info("$img_bak has not changed, skipping\n");
                                 next;
                         }
                         
                         my $mtime = (stat($img_bak))[9];
                         
-                        if ((-f $img_bak) && ($last_update) && ($mtime >= $last_update)) {
+                        if ((-f $img_bak) && ($last_update) && ($mtime >= $last_update)){
                                 $self->log()->info("$img_bak has not changed ($mtime/$last_update), skipping\n");
                                 $has_changed = 0;
                                 next;
@@ -823,7 +869,7 @@ sub store_rdf {
                 $rdf_root = $self->{cfg}->param("backup.photos_root");
         }
 
-        my $secret = $photo->find("/rsp/photo/\@secret")->string_value();
+        my $secret = $photo->find("/rsp/photo/\@originalsecret")->string_value();
         my $id     = $photo->find("/rsp/photo/\@id")->string_value();
 
         my $meta_bak   = $self->path_rdf_dumpfile($photo);
@@ -1195,10 +1241,6 @@ http://www.w3.org/2000/01/rdf-schema#
 
 http://www.w3.org/2004/02/skos/core#
 
-=item B<trynt>
-
-http://www.trynt.com#
-
 =back
 
 I<Net::Flickr::Backup> adds the following namespaces :
@@ -1274,7 +1316,7 @@ sub make_photo_triples {
         foreach my $label (keys %{$self->{'__files'}}) {
                 
                 my $uri   = "file://".$self->{'__files'}->{$label};
-                my $photo = sprintf("%s%s/%d", $FLICKR_URL_PHOTOS, $data->{user_id}, $data->{photo_id});
+                my $photo = sprintf("%s%s/%s", $FLICKR_URL_PHOTOS, $data->{user_id}, $data->{photo_id});
                 
                 push @$triples, [$uri, $self->uri_shortform("rdfs", "seeAlso"), $photo];
                 push @$triples, [$uri, $self->uri_shortform("dc", "creator"), $creator_uri];
@@ -1382,7 +1424,7 @@ sub path_rdf_dumpfile {
         my ($yyyy,$mm,$dd) = ($1,$2,$3);	  	    
 
         my $meta_root  = File::Spec->catdir($rdf_root, $yyyy, $mm, $dd);
-        my $meta_fname = sprintf("%04d%02d%02d-%d-%s.xml", $yyyy, $mm, $dd, $id, $title);	
+        my $meta_fname = sprintf("%04d%02d%02d-%s-%s.xml", $yyyy, $mm, $dd, $id, $title);	
         my $meta_path  = File::Spec->catfile($meta_root, $meta_fname);
 
         return $meta_path;
@@ -1599,7 +1641,6 @@ Flickr (using Net::Flickr::RDF) :
   xmlns:nfr_geo="http://www.machinetags.org/wiki/geo#debug"
   xmlns:place="x-urn:flickr:place:"
   xmlns:exif="http://nwalsh.com/rdf/exif#"
-  xmlns:trynt="http://www.trynt.com#"
   xmlns:mt="x-urn:flickr:machinetag:"
   xmlns:exifi="http://nwalsh.com/rdf/exif-intrinsic#"
   xmlns:geonames="http://www.machinetags.org/wiki/geonames#feature"
@@ -1676,20 +1717,6 @@ Flickr (using Net::Flickr::RDF) :
     <exif:shutterSpeedValue>4351/1000</exif:shutterSpeedValue>
     <exif:exposureTime>0.049 sec (49/1000)</exif:exposureTime>
   </rdf:Description>
-
-  <trynt:color rdf:about="http://www.flickr.com/photos/35034348999@N01/522214395#604040">
-    <trynt:hexidecimal>604040</trynt:hexidecimal>
-    <trynt:count>472</trynt:count>
-  </trynt:color>
-
-  <rdf:Description rdf:about="x-urn:flickr:tag">
-    <rdfs:subClassOf rdf:resource="http://www.w3.org/2004/02/skos/core#Concept"/>
-  </rdf:Description>
-
-  <trynt:color rdf:about="http://www.flickr.com/photos/35034348999@N01/522214395#000000">
-    <trynt:hexidecimal>000000</trynt:hexidecimal>
-    <trynt:count>4841</trynt:count>
-  </trynt:color>
 
   <flickr:tag rdf:about="http://www.flickr.com/photos/35034348999@N01/tags/sanfrancisco">
     <skos:prefLabel>san francisco</skos:prefLabel>
@@ -1805,16 +1832,6 @@ Flickr (using Net::Flickr::RDF) :
     <a:hasAnnotation rdf:resource="http://www.flickr.com/photos/straup/522214395/#comment72157600295486776"/>
     <a:hasAnnotation rdf:resource="http://www.flickr.com/photos/straup/522214395/#comment72157600293655654"/>
     <geo:Point rdf:resource="http://www.flickr.com/photos/35034348999@N01/522214395#location"/>
-    <trynt:hasColor rdf:resource="http://www.flickr.com/photos/35034348999@N01/522214395#000000"/>
-    <trynt:hasColor rdf:resource="http://www.flickr.com/photos/35034348999@N01/522214395#c0c0c0"/>
-    <trynt:hasColor rdf:resource="http://www.flickr.com/photos/35034348999@N01/522214395#200000"/>
-    <trynt:hasColor rdf:resource="http://www.flickr.com/photos/35034348999@N01/522214395#402020"/>
-    <trynt:hasColor rdf:resource="http://www.flickr.com/photos/35034348999@N01/522214395#808080"/>
-    <trynt:hasColor rdf:resource="http://www.flickr.com/photos/35034348999@N01/522214395#a08080"/>
-    <trynt:hasColor rdf:resource="http://www.flickr.com/photos/35034348999@N01/522214395#000020"/>
-    <trynt:hasColor rdf:resource="http://www.flickr.com/photos/35034348999@N01/522214395#c0a0a0"/>
-    <trynt:hasColor rdf:resource="http://www.flickr.com/photos/35034348999@N01/522214395#604040"/>
-    <trynt:hasColor rdf:resource="http://www.flickr.com/photos/35034348999@N01/522214395#806060"/>
   </flickr:photo>
 
   <dcterms:StillImage rdf:about="http://farm1.static.flickr.com/232/522214395_ed16f959a2_t.jpg">
@@ -1846,26 +1863,6 @@ Flickr (using Net::Flickr::RDF) :
     <skos:prefLabel rdf:resource="filtr:process=filtr"/>
   </flickr:tag>
 
-  <trynt:color rdf:about="http://www.flickr.com/photos/35034348999@N01/522214395#808080">
-    <trynt:hexidecimal>808080</trynt:hexidecimal>
-    <trynt:count>726</trynt:count>
-  </trynt:color>
-
-  <trynt:color rdf:about="http://www.flickr.com/photos/35034348999@N01/522214395#a08080">
-    <trynt:hexidecimal>a08080</trynt:hexidecimal>
-    <trynt:count>575</trynt:count>
-  </trynt:color>
-
-  <trynt:color rdf:about="http://www.flickr.com/photos/35034348999@N01/522214395#000020">
-    <trynt:hexidecimal>000020</trynt:hexidecimal>
-    <trynt:count>499</trynt:count>
-  </trynt:color>
-
-  <trynt:color rdf:about="http://www.flickr.com/photos/35034348999@N01/522214395#402020">
-    <trynt:hexidecimal>402020</trynt:hexidecimal>
-    <trynt:count>749</trynt:count>
-  </trynt:color>
-
   <flickr:tag rdf:about="http://www.flickr.com/photos/tags/ph:camera=n95">
     <skos:altLabel>n95</skos:altLabel>
     <skos:broader rdf:resource="http://www.machinetags.org/wiki/ph#camera"/>
@@ -1891,11 +1888,6 @@ Flickr (using Net::Flickr::RDF) :
     <skos:altLabel rdf:resource="geo:debug=namespacetest"/>
   </flickr:tag>
 
-  <trynt:color rdf:about="http://www.flickr.com/photos/35034348999@N01/522214395#200000">
-    <trynt:hexidecimal>200000</trynt:hexidecimal>
-    <trynt:count>841</trynt:count>
-  </trynt:color>
-
   <dcterms:StillImage rdf:about="http://farm1.static.flickr.com/232/522214395_ed16f959a2_m.jpg">
     <dcterms:relation>Small</dcterms:relation>
     <exifi:height>180</exifi:height>
@@ -1908,11 +1900,6 @@ Flickr (using Net::Flickr::RDF) :
   <rdf:Description rdf:about="x-urn:flickr:user">
     <rdfs:subClassOf rdf:resource="http://xmlns.com/foaf/0.1/Person"/>
   </rdf:Description>
-
-  <trynt:color rdf:about="http://www.flickr.com/photos/35034348999@N01/522214395#806060">
-    <trynt:hexidecimal>806060</trynt:hexidecimal>
-    <trynt:count>464</trynt:count>
-  </trynt:color>
 
   <flickr:machinetag rdf:about="http://www.machinetags.org/wiki/ph#camera">
     <mt:predicate>camera</mt:predicate>
@@ -1938,11 +1925,6 @@ Flickr (using Net::Flickr::RDF) :
     <rdfs:seeAlso rdf:resource="http://www.flickr.com/photos/35034348999@N01/522214395#exif"/>
   </dcterms:StillImage>
 
-  <trynt:color rdf:about="http://www.flickr.com/photos/35034348999@N01/522214395#c0a0a0">
-    <trynt:hexidecimal>c0a0a0</trynt:hexidecimal>
-    <trynt:count>488</trynt:count>
-  </trynt:color>
-
   <flickr:place rdf:about="http://www.flickr.com/geo/United%20States/California/San%20Francisco/San%20Francisco">
     <place:county>San Francisco</place:county>
     <place:country>United States</place:country>
@@ -1950,11 +1932,6 @@ Flickr (using Net::Flickr::RDF) :
     <place:locality>San Francisco</place:locality>
     <dc:isReferencedBy rdf:resource="http://www.flickr.com/photos/35034348999@N01/522214395"/>
   </flickr:place>
-
-  <trynt:color rdf:about="http://www.flickr.com/photos/35034348999@N01/522214395#c0c0c0">
-    <trynt:hexidecimal>c0c0c0</trynt:hexidecimal>
-    <trynt:count>1475</trynt:count>
-  </trynt:color>
 
   <flickr:tag rdf:about="http://www.flickr.com/photos/tags/geo:debug=namespacetest">
     <skos:altLabel>namespace test</skos:altLabel>
@@ -1966,17 +1943,21 @@ Flickr (using Net::Flickr::RDF) :
 
 =head1 VERSION
 
-2.991
+3.0
 
 =head1 DATE
 
-$Date: 2008/02/08 08:20:10 $
+$Date: 2010/12/19 19:06:56 $
 
 =head1 AUTHOR
 
 Aaron Straup Cope E<lt>ascope@cpan.orgE<gt>
 
-=head1 SEE ALSO 
+=head1 CONTRIBUTORS
+
+Thomas Sibley E<lt>tsibley@cpan.orgE<gt>
+
+=head1 SEE ALSO
 
 L<Net::Flickr::API>
 
