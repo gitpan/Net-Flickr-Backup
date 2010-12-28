@@ -7,7 +7,7 @@ use warnings;
 package Net::Flickr::Backup;
 use base qw (Net::Flickr::RDF);
 
-$Net::Flickr::Backup::VERSION = '3.0';
+$Net::Flickr::Backup::VERSION = '3.1';
 
 =head1 NAME
 
@@ -688,7 +688,7 @@ sub backup_photo {
                 my $fetch_param = "fetch_" . $fetch_label;
                 my $do_fetch    = 1;
                 
-                if (($label ne "Original") || ($label ne "Video Original") || (exists($fetch_cfg->{$fetch_param}))) {
+                if (($label !~ /Original/) || (exists($fetch_cfg->{$fetch_param}))) {
                         $do_fetch = $fetch_cfg->{$fetch_param};
                 }
                 
@@ -1943,7 +1943,7 @@ Flickr (using Net::Flickr::RDF) :
 
 =head1 VERSION
 
-3.0
+3.1
 
 =head1 DATE
 
